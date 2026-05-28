@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+  <!-- iOS PWA メタタグ -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="StandBy">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <meta name="theme-color" content="#000000">
+  <title>StandBy</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, sans-serif;
+      position: fixed;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+
+    /* ── Main Layout ──────────────────────────────────── */
+    #app {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Clock Panel (Left 50%) ───────────────────────── */
+    #clock-panel {
+      width: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #1c1c1c;
+      cursor: pointer;
+    }
+
+    #clock-display {
+      text-align: center;
+    }
+
+    .clock-time {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(60px, 18vw, 148px);
+      font-weight: 200;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+
+    .clock-date {
+      font-size: clamp(11px, 2.2vw, 20px);
+      font-weight: 300;
+      opacity: 0.45;
+      margin-top: 10px;
+      letter-spacing: 0.08em;
+      display: none;
+    }
+
+    /* Style 1 – vertical split */
+    #clock-display.s1 .clock-time {
+      flex-direction: column;
+      gap: 0.04em;
+      font-size: clamp(60px, 24vw, 180px);
+    }
+    #clock-display.s1 #ck-sep { display: none; }
+
+    /* Style 2 – wide spacing */
+    #clock-display.s2 .clock-time { letter-spacing: 0.28em; }
+
+    /* Style 3 – dot separator (char set in JS) */
+
+    /* Style 4 – with date */
+    #clock-display.s4 .clock-time { font-size: clamp(52px, 15vw, 128px); }
+    #clock-display.s4 .clock-date { display: block; }
+
+    /* ── Right Panel (50%) ────────────────────────────── */
+    #right-panel {
+      width: 50%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    #weather-slide { left: 0; }
+    #timer-slide   { left: 100%; }
+
+    /* Slide indicator dots */
+    #slide-dots {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 7px;
+    }
+    .sdot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #fff;
+      opacity: 0.25;
+    }
+    .sdot.on { opacity: 0.75; }
+
+    /* Swipe hint */
+    #swipe-hint {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      opacity: 0.2;
+    }
+
+    /* ── Weather ──────────────────────────────────────── */
+    #weather-content {
+      text-align: center;
+      padding: 12px;
+    }
+
+    .w-icon {
+      font-size: clamp(36px, 9vw, 72px);
+      line-height: 1;
+    }
+
+    .w-temp {
+      font-size: clamp(28px, 7vw, 60px);
+      font-weight: 200;
+      margin-top: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    .w-sub {
+      font-size: clamp(11px, 2.2vw, 18px);
+      opacity: 0.55;
+      margin-top: 10px;
+      line-height: 1.9;
+      white-space: pre;
+    }
+
+    #weather-status {
+      font-size: 10px;
+      opacity: 0.3;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── API Key UI ───────────────────────────────────── */
+    #api-setup {
+      margin-top: 16px;
+      text-align: center;
+      display: none;
+    }
+
+    #api-entry p {
+      font-size: 10px;
+      opacity: 0.38;
+      margin-bottom: 7px;
+      letter-spacing: 0.05em;
+    }
+
+    #api-key-input {
+      background: #0e0e0e;
+      border: 1px solid #2a2a2a;
+      color: #fff;
+      padding: 5px 9px;
+      font-size: 11px;
+      width: 170px;
+      font-family: inherit;
+      -webkit-appearance: none;
+      border-radius: 0;
+      touch-action: auto;
+    }
+
+    #api-key-save {
+      display: block;
+      margin: 6px auto 0;
+      background: #1a1a1a;
+      color: #aaa;
+      border: 1px solid #2a2a2a;
+      padding: 5px 18px;
+      font-size: 11px;
+      font-family: inherit;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      border-radius: 0;
+    }
+
+    /* 設定済み表示 */
+    #api-saved {
+      text-align: center;
+      display: none;
+    }
+
+    #api-masked {
+      font-size: 11px;
+      opacity: 0.45;
+      letter-spacing: 0.06em;
+      margin-bottom: 7px;
+      font-family: 'Courier New', monospace;
+    }
+
+    #api-key-change, #api-key-delete {
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      color: #555;
+      padding: 4px 12px;
+      font-size: 10px;
+      font-family: inherit;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border-radius: 0;
+      margin: 0 3px;
+    }
+    #api-key-delete { color: #4a2020; border-color: #2a1a1a; }
+
+    /* ── Timer Input ──────────────────────────────────── */
+    #timer-input-wrap {
+      text-align: center;
+    }
+
+    .t-label {
+      font-size: 10px;
+      opacity: 0.35;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .t-inputs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .t-num {
+      background: #0e0e0e;
+      border: 1px solid #2a2a2a;
+      color: #fff;
+      font-size: clamp(26px, 6.5vw, 54px);
+      font-weight: 200;
+      width: clamp(52px, 11vw, 90px);
+      text-align: center;
+      padding: 3px 0;
+      font-family: inherit;
+      -webkit-appearance: none;
+      border-radius: 0;
+      touch-action: auto;
+    }
+
+    .t-colon {
+      font-size: clamp(26px, 6.5vw, 54px);
+      font-weight: 100;
+      opacity: 0.35;
+    }
+
+    #start-btn {
+      display: block;
+      margin: 16px auto 0;
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: clamp(6px, 1.2vw, 10px) clamp(20px, 4vw, 36px);
+      font-size: clamp(11px, 2.2vw, 16px);
+      font-family: inherit;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    /* ── Timer Overlay (fullscreen) ──────────────────── */
+    #timer-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #timer-overlay.show { display: flex; }
+
+    #mini-clock {
+      position: fixed;
+      top: 14px;
+      left: 18px;
+      font-size: clamp(13px, 2.8vw, 22px);
+      font-weight: 300;
+      opacity: 0.38;
+      letter-spacing: 0.04em;
+    }
+
+    #timer-big {
+      font-size: clamp(72px, 18vw, 160px);
+      font-weight: 100;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+
+    #time-up-label {
+      font-size: clamp(28px, 7vw, 64px);
+      font-weight: 100;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      display: none;
+    }
+
+    /* 終了 / 中止 ボタン共通 */
+    #end-btn, #cancel-btn {
+      position: fixed;
+      bottom: 28px;
+      background: transparent;
+      border: 1px solid #333;
+      color: #666;
+      padding: 7px 26px;
+      font-size: clamp(11px, 2vw, 15px);
+      font-family: inherit;
+      letter-spacing: 0.14em;
+      cursor: pointer;
+      display: none;
+      border-radius: 0;
+    }
+
+    /* 終了: 中央（TIME UP 後） */
+    #end-btn {
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    /* 中止: 右下（稼働中のみ） */
+    #cancel-btn {
+      right: 24px;
+      color: #3a3a3a;
+      border-color: #1e1e1e;
+      font-size: clamp(10px, 1.7vw, 12px);
+      letter-spacing: 0.12em;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Left: Clock ────────────────────────────────── -->
+  <div id="clock-panel">
+    <div id="clock-display" class="s0">
+      <div class="clock-time">
+        <span id="ck-h">--</span><span id="ck-sep">:</span><span id="ck-m">--</span>
+      </div>
+      <div class="clock-date" id="ck-date"></div>
+    </div>
+  </div>
+
+  <!-- ── Right: Slides ──────────────────────────────── -->
+  <div id="right-panel">
+
+    <!-- Slide 0: Weather -->
+    <div id="weather-slide" class="slide">
+      <div id="weather-content">
+        <div class="w-icon" id="w-icon">🌡️</div>
+        <div class="w-temp" id="w-temp">--°C</div>
+        <div class="w-sub"  id="w-sub">読み込み中…</div>
+      </div>
+
+      <div id="api-setup">
+        <!-- 未設定: 入力フォーム -->
+        <div id="api-entry">
+          <p>OpenWeather API キー</p>
+          <input type="password" id="api-key-input"
+                 placeholder="••••••••••••••••"
+                 autocomplete="new-password" spellcheck="false">
+          <button id="api-key-save">保存</button>
+        </div>
+        <!-- 設定済み: マスク表示 -->
+        <div id="api-saved">
+          <div id="api-masked"></div>
+          <button id="api-key-change">変更</button>
+          <button id="api-key-delete">削除</button>
+        </div>
+      </div>
+
+      <div id="weather-status"></div>
+    </div>
+
+    <!-- Slide 1: Timer input -->
+    <div id="timer-slide" class="slide">
+      <div id="timer-input-wrap">
+        <div class="t-label">Timer</div>
+        <div class="t-inputs">
+          <input type="number" class="t-num" id="t-min" value="5" min="0" max="99">
+          <span class="t-colon">:</span>
+          <input type="number" class="t-num" id="t-sec" value="0"  min="0" max="59">
+        </div>
+        <button id="start-btn">START</button>
+      </div>
+    </div>
+
+    <div id="slide-dots">
+      <div class="sdot on" id="dot-0"></div>
+      <div class="sdot"    id="dot-1"></div>
+    </div>
+    <div id="swipe-hint">‹</div>
+  </div>
+
+</div>
+
+<!-- ── Timer Overlay ────────────────────────────────── -->
+<div id="timer-overlay">
+  <div id="mini-clock">--:--</div>
+  <div id="timer-big">--:--</div>
+  <div id="time-up-label">TIME UP</div>
+  <button id="end-btn">終了</button>
+  <button id="cancel-btn">中止</button>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+const $ = id => document.getElementById(id);
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+/* ============================================================
+   State
+   ============================================================ */
+// 'normal' | 'timerInput' | 'running' | 'finished'
+let appState     = 'normal';
+let currentSlide = +(localStorage.getItem('lastSlide') || 0);
+let clockStyle   = +(localStorage.getItem('clockStyle') || 0);
+let clockSyncTO  = null;
+let clockIntv    = null;
+let timerIntv    = null;
+let timerEndTime = 0;   // 精度補正用: タイマー終了予定のエポックms
+let audioCtx     = null;
+let alarmActive  = false;
+let alarmTO      = null;
+let weatherIntv  = null;
+let wakeLock     = null;
+
+/* ============================================================
+   Clock
+   ============================================================ */
+const ckDisp = $('clock-display');
+const ckH    = $('ck-h');
+const ckSep  = $('ck-sep');
+const ckM    = $('ck-m');
+const ckDate = $('ck-date');
+const miniCk = $('mini-clock');
+
+const DAYS_JA  = ['日','月','火','水','木','金','土'];
+const SEP_CHAR = [':', ':', ':', '·', ':'];  // indexed by clockStyle
+
+function updateClock() {
+  const now = new Date();
+  const h   = pad2(now.getHours());
+  const m   = pad2(now.getMinutes());
+  ckH.textContent    = h;
+  ckSep.textContent  = SEP_CHAR[clockStyle];
+  ckM.textContent    = m;
+  ckDate.textContent = `${DAYS_JA[now.getDay()]} ${now.getMonth()+1}/${now.getDate()}`;
+  miniCk.textContent = `${h}:${m}`;
+}
+
+function syncClock() {
+  updateClock();
+  // 次の分境界まで待ってから 60s 間隔に乗る
+  clockSyncTO = setTimeout(() => {
+    updateClock();
+    clockIntv = setInterval(updateClock, 60000);
+  }, 60000 - (Date.now() % 60000));
+}
+
+function applyClockStyle(s) {
+  clockStyle = s;
+  localStorage.setItem('clockStyle', s);
+  ckDisp.className = 's' + s;
+  updateClock();
+}
+
+$('clock-panel').addEventListener('click', () => {
+  applyClockStyle((clockStyle + 1) % 5);
+});
+
+/* ============================================================
+   Slide / Swipe
+   ============================================================ */
+const rightPanel   = $('right-panel');
+const weatherSlide = $('weather-slide');
+const timerSlideEl = $('timer-slide');
+const dot0         = $('dot-0');
+const dot1         = $('dot-1');
+const swipeHint    = $('swipe-hint');
+
+let tsX = 0;
+
+function goSlide(idx) {
+  currentSlide = idx;
+  localStorage.setItem('lastSlide', idx);  // 最終スライド位置を保存
+  if (idx === 0) {
+    weatherSlide.style.left = '0';
+    timerSlideEl.style.left = '100%';
+    dot0.classList.add('on');
+    dot1.classList.remove('on');
+    swipeHint.textContent = '‹';
+    appState = 'normal';
+  } else {
+    weatherSlide.style.left = '-100%';
+    timerSlideEl.style.left = '0';
+    dot0.classList.remove('on');
+    dot1.classList.add('on');
+    swipeHint.textContent = '›';
+    appState = 'timerInput';
+  }
+}
+
+rightPanel.addEventListener('touchstart', e => {
+  tsX = e.touches[0].clientX;
+}, { passive: true });
+
+rightPanel.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - tsX;
+  if (Math.abs(dx) < 35) return;
+  if (dx < 0 && currentSlide === 0) goSlide(1);
+  if (dx > 0 && currentSlide === 1) goSlide(0);
+}, { passive: true });
+
+/* ============================================================
+   API Key – obfuscated storage
+   ============================================================
+   XOR + Base64 で localStorage に難読化保存。
+   平文は一切メモリ外に保持しない。入力値は保存直後にクリア。
+   ============================================================ */
+const _SALT = 'StandByApp\x1f\x2b\x37\x4c\x51\x68\x7a\x8f\x93\xab';
+
+function _encodeKey(raw) {
+  try {
+    return btoa(raw.split('').map((c, i) =>
+      String.fromCharCode(c.charCodeAt(0) ^ _SALT.charCodeAt(i % _SALT.length))
+    ).join(''));
+  } catch { return null; }
+}
+
+function _decodeKey(enc) {
+  try {
+    return atob(enc).split('').map((c, i) =>
+      String.fromCharCode(c.charCodeAt(0) ^ _SALT.charCodeAt(i % _SALT.length))
+    ).join('');
+  } catch { return null; }
+}
+
+function loadApiKey() {
+  const enc = localStorage.getItem('wxKey');
+  return enc ? _decodeKey(enc) : null;
+}
+
+function saveApiKey(raw) {
+  const enc = _encodeKey(raw);
+  if (!enc) return false;
+  localStorage.setItem('wxKey', enc);
+  return true;
+}
+
+function maskKey(raw) {
+  if (!raw || raw.length < 4) return '••••••••';
+  return '••••••••' + raw.slice(-4);
+}
+
+const apiSetup = $('api-setup');
+const wStatus  = $('weather-status');
+
+function showApiSavedState() {
+  $('api-key-input').value = '';       // 入力値を即クリア
+  $('api-entry').style.display = 'none';
+  $('api-saved').style.display = 'block';
+  $('api-masked').textContent  = 'API: ' + maskKey(loadApiKey());
+  apiSetup.style.display       = 'block';
+}
+
+function showApiEntryState() {
+  $('api-key-input').value     = '';
+  $('api-entry').style.display = 'block';
+  $('api-saved').style.display = 'none';
+}
+
+function showApiSetup() {
+  $('w-icon').textContent = '';
+  $('w-temp').textContent = '';
+  $('w-sub').textContent  = '';
+  showApiEntryState();
+  apiSetup.style.display = 'block';
+}
+
+$('api-key-save').addEventListener('click', () => {
+  const k = $('api-key-input').value.trim();
+  if (!k) return;
+  if (!saveApiKey(k)) return;
+  localStorage.removeItem('wxLat');
+  localStorage.removeItem('wxLon');
+  showApiSavedState();
+  fetchWeather();
+});
+
+$('api-key-change').addEventListener('click', () => {
+  showApiEntryState();
+});
+
+$('api-key-delete').addEventListener('click', () => {
+  localStorage.removeItem('wxKey');
+  localStorage.removeItem('wxLat');
+  localStorage.removeItem('wxLon');
+  localStorage.removeItem('wxCache');
+  showApiSetup();
+});
+
+/* ============================================================
+   Weather
+   ============================================================ */
+const wIcon = $('w-icon');
+const wTemp = $('w-temp');
+const wSub  = $('w-sub');
+
+const W_ICONS = {
+  '01':'☀️','02':'⛅','03':'☁️','04':'☁️',
+  '09':'🌧️','10':'🌦️','11':'⛈️','13':'❄️','50':'🌫️'
+};
+
+function wIconFor(code) {
+  return W_ICONS[code.slice(0, 2)] || '🌡️';
+}
+
+function renderWeather(d) {
+  wIcon.textContent = wIconFor(d.icon);
+  wTemp.textContent = Math.round(d.temp) + '°C';
+  wSub.textContent  = d.nextIcon
+    ? `→ 3h後 ${wIconFor(d.nextIcon)}\n☔ ${d.pop}%`
+    : '';
+  apiSetup.style.display = 'none';
+  wStatus.textContent    = '';
+}
+
+function loadCachedWeather() {
+  try {
+    const raw = localStorage.getItem('wxCache');
+    if (!raw) return false;
+    renderWeather(JSON.parse(raw));
+    return true;
+  } catch { return false; }
+}
+
+async function fetchWeather() {
+  const key = loadApiKey();
+  if (!key) { showApiSetup(); return; }
+
+  let lat = localStorage.getItem('wxLat');
+  let lon = localStorage.getItem('wxLon');
+
+  // 位置情報: 初回のみ取得、以降は localStorage を再利用
+  if (!lat || !lon) {
+    if (!navigator.geolocation) { loadCachedWeather(); return; }
+    try {
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, {
+          timeout: 10000, maximumAge: 3600000
+        })
+      );
+      lat = pos.coords.latitude.toFixed(4);
+      lon = pos.coords.longitude.toFixed(4);
+      localStorage.setItem('wxLat', lat);
+      localStorage.setItem('wxLon', lon);
+    } catch {
+      // 位置取得失敗 → キャッシュで表示
+      loadCachedWeather();
+      return;
+    }
+  }
+
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/forecast` +
+      `?lat=${lat}&lon=${lon}&appid=${key}&units=metric&cnt=2&lang=ja`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const cur  = json.list[0];
+    const nxt  = json.list[1];
+    const data = {
+      temp:     cur.main.temp,
+      icon:     cur.weather[0].icon,
+      nextIcon: nxt ? nxt.weather[0].icon : null,
+      pop:      nxt ? Math.round((nxt.pop || 0) * 100) : 0,
+      ts:       Date.now()
+    };
+    localStorage.setItem('wxCache', JSON.stringify(data));
+    renderWeather(data);
+    wStatus.textContent =
+      '更新: ' + new Date().toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit' });
+  } catch {
+    // 通信失敗 → キャッシュにフォールバック、なければエラー表示
+    if (!loadCachedWeather()) {
+      wIcon.textContent = '❓';
+      wTemp.textContent = '';
+      wSub.textContent  = '取得失敗';
+    }
+  }
+}
+
+function startWeatherCycle() {
+  fetchWeather();
+  weatherIntv = setInterval(fetchWeather, 30 * 60 * 1000);
+}
+
+/* ============================================================
+   Wake Lock（画面スリープ防止）
+   ============================================================
+   対応ブラウザのみ有効。未対応時は無音でスキップ。
+   タイマー稼働中のみ取得し、終了・中止時に解放する。
+   ============================================================ */
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    // Page visibility 変化で自動解放されるので再取得する
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+        } catch {}
+      }
+    }, { once: true });
+  } catch {}
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+
+/* ============================================================
+   Timer（精度補正付き）
+   ============================================================
+   setInterval のドリフトを防ぐため、終了予定時刻 (timerEndTime)
+   との差分から残り秒数を毎回再計算する。
+   ============================================================ */
+const timerOverlay = $('timer-overlay');
+const timerBig     = $('timer-big');
+const timeUpLabel  = $('time-up-label');
+const endBtn       = $('end-btn');
+const cancelBtn    = $('cancel-btn');
+const startBtn     = $('start-btn');
+const tMin         = $('t-min');
+const tSec         = $('t-sec');
+
+function fmtTimer(s) {
+  return pad2(Math.floor(s / 60)) + ':' + pad2(s % 60);
+}
+
+function resetTimerOverlayUI() {
+  timerBig.style.display    = 'block';
+  timeUpLabel.style.display = 'none';
+  endBtn.style.display      = 'none';
+  cancelBtn.style.display   = 'none';
+}
+
+function tickTimer() {
+  // endTime との差分で残り秒を計算（setInterval のズレを補正）
+  const remaining = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
+
+  if (remaining <= 0) {
+    timerBig.textContent      = '00:00';
+    clearInterval(timerIntv);
+    timerIntv = null;
+    appState  = 'finished';
+    timerBig.style.display    = 'none';
+    timeUpLabel.style.display = 'block';
+    cancelBtn.style.display   = 'none';
+    endBtn.style.display      = 'block';
+    releaseWakeLock();
+    playAlarm();
+  } else {
+    timerBig.textContent = fmtTimer(remaining);
+  }
+}
+
+startBtn.addEventListener('click', () => {
+  // AudioContext は必ずユーザージェスチャー内で初期化（iOS 要件）
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+  }
+
+  const m = parseInt(tMin.value) || 0;
+  const s = parseInt(tSec.value) || 0;
+  const totalSecs = m * 60 + s;
+  if (totalSecs <= 0) return;
+
+  // 終了予定時刻を記録（精度補正の基準）
+  timerEndTime = Date.now() + totalSecs * 1000;
+
+  appState             = 'running';
+  timerBig.textContent = fmtTimer(totalSecs);
+  resetTimerOverlayUI();
+  cancelBtn.style.display = 'block';
+  timerOverlay.classList.add('show');
+
+  requestWakeLock();
+  timerIntv = setInterval(tickTimer, 1000);
+});
+
+// 終了ボタン（TIME UP 後）
+endBtn.addEventListener('click', () => {
+  clearInterval(timerIntv); timerIntv = null;
+  stopAlarm();
+  releaseWakeLock();
+  timerOverlay.classList.remove('show');
+  resetTimerOverlayUI();
+  appState = 'normal';
+  goSlide(0);
+});
+
+// 中止ボタン（稼働中）
+cancelBtn.addEventListener('click', () => {
+  clearInterval(timerIntv); timerIntv = null;
+  releaseWakeLock();
+  timerOverlay.classList.remove('show');
+  resetTimerOverlayUI();
+  appState = 'timerInput';
+  goSlide(1);
+});
+
+/* ============================================================
+   Alarm（Web Audio API – 外部ファイル不要）
+   ============================================================ */
+function scheduleBeepCycle() {
+  if (!alarmActive || !audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const st = t0 + i * 0.45;
+    gain.gain.setValueAtTime(0.22, st);
+    gain.gain.exponentialRampToValueAtTime(0.001, st + 0.35);
+    osc.start(st);
+    osc.stop(st + 0.35);
+  }
+  alarmTO = setTimeout(scheduleBeepCycle, 2500);
+}
+
+function playAlarm() {
+  if (!audioCtx) return;
+  alarmActive = true;
+  scheduleBeepCycle();
+}
+
+function stopAlarm() {
+  alarmActive = false;
+  if (alarmTO) { clearTimeout(alarmTO); alarmTO = null; }
+}
+
+/* ============================================================
+   焼き付き防止（5分ごとに ±3px シフト）
+   ============================================================ */
+function startBurnInPrevention() {
+  setInterval(() => {
+    const x = (Math.random() * 6 - 3) | 0;
+    const y = (Math.random() * 6 - 3) | 0;
+    $('app').style.transform = `translate(${x}px,${y}px)`;
+  }, 300000);
+}
+
+/* ============================================================
+   Init
+   ============================================================ */
+(function init() {
+  // 時計スタイル復元
+  ckDisp.className = 's' + clockStyle;
+
+  // 時計（分境界に同期）
+  syncClock();
+
+  // 最終スライド位置を復元
+  goSlide(currentSlide);
+
+  // APIキー設定済みならマスク表示を復元
+  if (localStorage.getItem('wxKey')) {
+    showApiSavedState();
+  }
+
+  // 天気（30分ごと）
+  startWeatherCycle();
+
+  // 焼き付き防止
+  startBurnInPrevention();
+
+  // Service Worker 登録
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
